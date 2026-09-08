@@ -63,6 +63,83 @@ impl Gemini {
     }
 }
 
+const DEFAULT_GEMINI_MODELS: &[(&str, &str)] = &[
+    ("gemini-2.5-pro", "Gemini 2.5 Pro"),
+    ("gemini-2.5-flash", "Gemini 2.5 Flash"),
+    ("gemini-2.5-flash-lite", "Gemini 2.5 Flash-Lite"),
+    ("gemini-2.0-flash", "Gemini 2.0 Flash"),
+    ("gemini-2.0-flash-thinking-exp-01-21", "Gemini 2.0 Flash Thinking"),
+    ("gemini-1.5-pro", "Gemini 1.5 Pro"),
+    ("gemini-1.5-flash", "Gemini 1.5 Flash"),
+    ("gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview"),
+    ("gemini-3-pro-preview", "Gemini 3 Pro"),
+    ("gemini-3-flash-preview", "Gemini 3 Flash"),
+];
+
+#[derive(Debug, Clone, Deserialize)]
+struct CustomGeminiModel {
+    id: String,
+    #[serde(default)]
+    name: Option<String>,
+}
+
+fn load_custom_gemini_models() -> Vec<ModelInfo> {
+    let mut custom_models = Vec::new();
+
+    // Check potential user config locations:
+    // 1. ~/.config/vibe-kanban/gemini_models.json
+    // 2. ~/Library/Application Support/ai.bloop.vibe-kanban/gemini_models.json
+    // 3. ~/.gemini/custom_models.json
+    let config_paths = [
+        dirs::config_dir().map(|p| p.join("vibe-kanban").join("gemini_models.json")),
+        dirs::data_dir().map(|p| p.join("ai.bloop.vibe-kanban").join("gemini_models.json")),
+        dirs::home_dir().map(|p| p.join(".gemini").join("custom_models.json")),
+    ];
+
+    for path_opt in config_paths.into_iter().flatten() {
+        if path_opt.exists() {
+            if let Ok(content) = std::fs::read_to_string(&path_opt) {
+                if let Ok(models) = serde_json::from_str::<Vec<CustomGeminiModel>>(&content) {
+                    for m in models {
+                        let name = m.name.unwrap_or_else(|| m.id.clone());
+                        custom_models.push(ModelInfo {
+                            id: m.id,
+                            name,
+                            provider_id: None,
+                            reasoning_options: vec![],
+                        });
+                    }
+                    if !custom_models.is_empty() {
+                        tracing::info!("Loaded {} custom Gemini models from {:?}", custom_models.len(), path_opt);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    custom_models
+}
+
+pub fn get_available_gemini_models() -> Vec<ModelInfo> {
+    let mut models = load_custom_gemini_models();
+    let mut seen_ids: std::collections::HashSet<String> =
+        models.iter().map(|m| m.id.clone()).collect();
+
+    for &(id, name) in DEFAULT_GEMINI_MODELS {
+        if seen_ids.insert(id.to_string()) {
+            models.push(ModelInfo {
+                id: id.to_string(),
+                name: name.to_string(),
+                provider_id: None,
+                reasoning_options: vec![],
+            });
+        }
+    }
+
+    models
+}
+
 #[async_trait]
 impl StandardCodingAgentExecutor for Gemini {
     fn apply_overrides(&mut self, executor_config: &ExecutorConfig) {
@@ -201,29 +278,12 @@ impl StandardCodingAgentExecutor for Gemini {
         _workdir: Option<&std::path::Path>,
         _repo_path: Option<&std::path::Path>,
     ) -> Result<futures::stream::BoxStream<'static, json_patch::Patch>, ExecutorError> {
+        let models = get_available_gemini_models();
+        let default_model = models.first().map(|m| m.id.clone());
         let options = ExecutorDiscoveredOptions {
             model_selector: ModelSelectorConfig {
-                models: vec![
-                    ModelInfo {
-                        id: "gemini-3.1-pro-preview".to_string(),
-                        name: "Gemini 3.1 Pro Preview".to_string(),
-                        provider_id: None,
-                        reasoning_options: vec![],
-                    },
-                    ModelInfo {
-                        id: "gemini-3-pro-preview".to_string(),
-                        name: "Gemini 3 Pro".to_string(),
-                        provider_id: None,
-                        reasoning_options: vec![],
-                    },
-                    ModelInfo {
-                        id: "gemini-3-flash-preview".to_string(),
-                        name: "Gemini 3 Flash".to_string(),
-                        provider_id: None,
-                        reasoning_options: vec![],
-                    },
-                ],
-                default_model: Some("gemini-3-pro-preview".to_string()),
+                models,
+                default_model,
                 permissions: vec![PermissionPolicy::Auto, PermissionPolicy::Supervised],
                 ..Default::default()
             },
@@ -232,5 +292,20 @@ impl StandardCodingAgentExecutor for Gemini {
         Ok(Box::pin(futures::stream::once(async move {
             patch::executor_discovered_options(options)
         })))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_gemini_default_models() {
+        let models = get_available_gemini_models();
+        assert!(!models.is_empty());
+        assert!(models.iter().any(|m| m.id == "gemini-2.5-pro"));
+        assert!(models.iter().any(|m| m.id == "gemini-2.5-flash"));
+        assert!(models.iter().any(|m| m.id == "gemini-2.0-flash"));
+        assert!(models.iter().any(|m| m.id == "gemini-3-pro-preview"));
     }
 }

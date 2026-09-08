@@ -1,0 +1,67 @@
+name: Build macOS Desktop App
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: build-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.13.1
+
+      - name: Setup Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: nightly-2025-12-04
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build Web App
+        run: |
+          export VK_SHARED_API_BASE="https://api.vibekanban.com"
+          export VITE_VK_SHARED_API_BASE="https://api.vibekanban.com"
+          cd packages/local-web && pnpm run build
+
+      - name: Prepare Tauri Config
+        run: |
+          TAURI_CONF="crates/tauri-app/tauri.conf.json"
+          node -e "
+            const fs = require('fs');
+            const conf = JSON.parse(fs.readFileSync('$TAURI_CONF', 'utf8'));
+            conf.plugins.updater.endpoints = conf.plugins.updater.endpoints.map(e =>
+              e === '__TAURI_UPDATE_ENDPOINT__' ? 'https://localhost/disabled' : e
+            );
+            fs.writeFileSync('$TAURI_CONF', JSON.stringify(conf, null, 2) + '\n');
+          "
+
+      - name: Build Tauri Desktop App
+        run: |
+          cd crates/tauri-app
+          npx --yes @tauri-apps/cli build
+
+      - name: Upload macOS App & DMG Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Vibe-Kanban-macOS-Desktop
+          path: |
+            target/release/bundle/macos
+            target/release/bundle/dmg/*.dmg
