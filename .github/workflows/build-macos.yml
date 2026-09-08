@@ -11,8 +11,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    runs-on: macos-14
+  build-frontend:
+    name: Build Frontend Web App
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -27,19 +28,45 @@ jobs:
         with:
           version: 10.13.1
 
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build local-web
+        run: |
+          export VK_SHARED_API_BASE="https://api.vibekanban.com"
+          export VITE_VK_SHARED_API_BASE="https://api.vibekanban.com"
+          cd packages/local-web && pnpm run build
+
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: packages/local-web/dist/
+          retention-days: 1
+
+  build-desktop:
+    name: Build macOS Tauri App
+    needs: build-frontend
+    runs-on: macos-14
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Setup Rust nightly
         uses: dtolnay/rust-toolchain@nightly
         with:
           toolchain: nightly-2025-12-04
 
-      - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+      - name: Install tauri-cli
+        uses: taiki-e/cache-cargo-install-action@v2
+        with:
+          tool: tauri-cli@2
 
-      - name: Build Web App
-        run: |
-          export VK_SHARED_API_BASE="https://api.vibekanban.com"
-          export VITE_VK_SHARED_API_BASE="https://api.vibekanban.com"
-          cd packages/local-web && pnpm run build
+      - name: Download frontend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: packages/local-web/dist
 
       - name: Prepare Tauri Config
         run: |
@@ -55,8 +82,11 @@ jobs:
 
       - name: Build Tauri Desktop App
         run: |
-          cd crates/tauri-app
-          npx --yes @tauri-apps/cli build
+          if [ -f "crates/tauri-app/tauri.conf.json" ]; then
+            (cd crates/tauri-app && cargo tauri build) || cargo tauri build --config crates/tauri-app/tauri.conf.json
+          else
+            cargo tauri build
+          fi
 
       - name: Upload macOS App & DMG Artifacts
         uses: actions/upload-artifact@v4
@@ -65,3 +95,5 @@ jobs:
           path: |
             target/release/bundle/macos
             target/release/bundle/dmg/*.dmg
+            crates/tauri-app/target/release/bundle/macos
+            crates/tauri-app/target/release/bundle/dmg/*.dmg
