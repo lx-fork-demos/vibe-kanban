@@ -74,9 +74,13 @@ jobs:
           node -e "
             const fs = require('fs');
             const conf = JSON.parse(fs.readFileSync('$TAURI_CONF', 'utf8'));
-            conf.plugins.updater.endpoints = conf.plugins.updater.endpoints.map(e =>
-              e === '__TAURI_UPDATE_ENDPOINT__' ? 'https://localhost/disabled' : e
-            );
+            if (conf.bundle) {
+              conf.bundle.createUpdaterArtifacts = false;
+            }
+            if (conf.plugins && conf.plugins.updater) {
+              delete conf.plugins.updater.pubkey;
+              conf.plugins.updater.endpoints = ['https://localhost/disabled'];
+            }
             fs.writeFileSync('$TAURI_CONF', JSON.stringify(conf, null, 2) + '\n');
           "
 
