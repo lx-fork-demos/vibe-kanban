@@ -63,6 +63,13 @@
           "autonomy": "skip-permissions-unsafe"
         }
       }
+    },
+    "GOOGLE_ANTIGRAVITY": {
+      "DEFAULT": {
+        "GOOGLE_ANTIGRAVITY": {
+          "yolo": true
+        }
+      }
     }
   }
 }

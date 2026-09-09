@@ -22,7 +22,7 @@ use crate::{
     command::CommandBuildError,
     env::ExecutionEnv,
     executors::{
-        amp::Amp, claude::ClaudeCode, codex::Codex, copilot::Copilot, cursor::CursorAgent,
+        amp::Amp, antigravity::GoogleAntigravity, claude::ClaudeCode, codex::Codex, copilot::Copilot, cursor::CursorAgent,
         droid::Droid, gemini::Gemini, opencode::Opencode, qwen::QwenCode,
     },
     logs::utils::patch,
@@ -32,6 +32,7 @@ use crate::{
 
 pub mod acp;
 pub mod amp;
+pub mod antigravity;
 pub mod claude;
 pub mod codex;
 pub mod copilot;
@@ -119,6 +120,7 @@ pub enum CodingAgent {
     QwenCode,
     Copilot,
     Droid,
+    GoogleAntigravity,
     #[cfg(feature = "qa-mode")]
     QaMock(QaMockExecutor),
 }
@@ -189,7 +191,7 @@ impl CodingAgent {
                 BaseAgentCapability::SetupHelper,
                 BaseAgentCapability::ContextUsage,
             ],
-            Self::Gemini(_) | Self::QwenCode(_) => {
+            Self::Gemini(_) | Self::QwenCode(_) | Self::GoogleAntigravity(_) => {
                 vec![BaseAgentCapability::SessionFork]
             }
             Self::CursorAgent(_) => vec![BaseAgentCapability::SetupHelper],
@@ -419,5 +421,14 @@ mod tests {
         let result: Result<BaseCodingAgent, _> = serde_json::from_str(r#""CURSOR""#);
         assert!(result.is_ok(), "CURSOR should deserialize via serde");
         assert_eq!(result.unwrap(), BaseCodingAgent::CursorAgent);
+
+        // Test GOOGLE_ANTIGRAVITY
+        let result = BaseCodingAgent::from_str("GOOGLE_ANTIGRAVITY");
+        assert!(result.is_ok(), "GOOGLE_ANTIGRAVITY should be valid");
+        assert_eq!(result.unwrap(), BaseCodingAgent::GoogleAntigravity);
+
+        let result: Result<BaseCodingAgent, _> = serde_json::from_str(r#""GOOGLE_ANTIGRAVITY""#);
+        assert!(result.is_ok(), "GOOGLE_ANTIGRAVITY should deserialize via serde");
+        assert_eq!(result.unwrap(), BaseCodingAgent::GoogleAntigravity);
     }
 }
