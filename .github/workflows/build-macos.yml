@@ -76,9 +76,9 @@ jobs:
             const conf = JSON.parse(fs.readFileSync('$TAURI_CONF', 'utf8'));
             if (conf.bundle) {
               conf.bundle.createUpdaterArtifacts = false;
+              conf.bundle.targets = ['app', 'dmg'];
             }
             if (conf.plugins && conf.plugins.updater) {
-              delete conf.plugins.updater.pubkey;
               conf.plugins.updater.endpoints = ['https://localhost/disabled'];
             }
             fs.writeFileSync('$TAURI_CONF', JSON.stringify(conf, null, 2) + '\n');
