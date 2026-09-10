@@ -5,7 +5,10 @@ use derivative::Derivative;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
-use workspace_utils::msg_store::MsgStore;
+use workspace_utils::{
+    msg_store::MsgStore,
+    shell::{resolve_executable_path, resolve_executable_path_blocking},
+};
 
 pub use super::acp::AcpAgentHarness;
 use crate::{
@@ -78,7 +81,7 @@ pub(crate) fn fallback_antigravity_models() -> Vec<ModelInfo> {
 }
 
 async fn discover_antigravity_models() -> Vec<ModelInfo> {
-    let agy_binary = if let Ok(path) = which::which("agy") {
+    let agy_binary = if let Some(path) = resolve_executable_path("agy").await {
         path
     } else if let Some(home) = dirs::home_dir() {
         let local_bin = home.join(".local").join("bin").join("agy");
@@ -256,7 +259,7 @@ impl StandardCodingAgentExecutor for GoogleAntigravity {
             }
         }
 
-        if which::which("agy").is_ok() {
+        if resolve_executable_path_blocking("agy").is_some() {
             AvailabilityInfo::InstallationFound
         } else {
             AvailabilityInfo::NotFound
